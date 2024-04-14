@@ -162,7 +162,7 @@ int first_fit(node_t *node, int *memory){
     }
     return 0;
 }
-//释放内存 for task2
+//释放内存
 void release_memory(node_t *node, int *memory){
     int i;
     for(i=node -> memory_start; i < node -> memory_start + node -> memory_size; i++){
