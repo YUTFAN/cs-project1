@@ -1,0 +1,17 @@
+name: Project 1 Visible Tests
+on:
+  push:
+jobs:
+  proj1-vis:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/feit-comp30023-2024/p1:latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Visible Tests
+        run: /test.sh
