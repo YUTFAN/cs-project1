@@ -34,7 +34,7 @@ PCB *createPCB(char *proc_name, int arrival_time, int service_time, int memory_r
     pcb->arrival_time = arrival_time;
     pcb->service_time = service_time;
     pcb->memory_requirement = memory_requirement;
-    pcb->state = WAITING;
+    pcb->state = 3;
     pcb->next = NULL;
     return pcb;
 }
@@ -88,47 +88,9 @@ int get_code_num (Queue *queue) {
     return queue->size;
 }
 
-//获得文件内的进程并存入队列
-Queue *get_processes(char *filename) {
-    FILE *file = fopen(filename, "r");
-    if (file == NULL) {
-        printf("File not found\n");
-        return NULL;
-    }
-    Queue *proc_queue = createQueue();
-    char proc_name[MAX_LENTH_OF_PROCESS_NAME];
-    int arrival_time;
-    int service_time;
-    int memory_requirement;
-    while (fscanf(file, "%s %d %d %d", proc_name, &arrival_time, &service_time, &memory_requirement) != EOF) {
-        PCB *pcb = createPCB(proc_name, arrival_time, service_time, memory_requirement, WAITING);
-        enqueue(proc_queue, pcb);
-    }
-    fclose(file);
-    return proc_queue;
-}
 
-//将当前时间大于等于到达时间的进程加入就绪队列
-void add_to_ready_queue(Queue *proc_queue, Queue *ready_queue, int time) {
-    PCB *previous = NULL;
-    PCB *current = proc_queue->head;
-    while (current != NULL && current->arrival_time <= time) {
-        PCB *next = current->next;
-        if(previous == NULL){
-            proc_queue->head = next;
-        }else{
-            previous->next = next;
-        }
-        current -> next = NULL;
-        current -> state = READY;
-        enqueue(ready_queue, current);
-        current = next;
-    }
-    if(proc_queue->head == NULL){
-        proc_queue->tail = NULL;
-    }
 
-}
+
 
 //实现round robin调度算法
 void round_robin(Queue *proc_queue, Queue *ready_queue, int quantum) {
@@ -147,9 +109,9 @@ void round_robin(Queue *proc_queue, Queue *ready_queue, int quantum) {
             time += quantum;
             running_proc->service_time = 0;
             running_proc->state = FINISHED;
-            running_proc = NULL;
             add_to_ready_queue(proc_queue, ready_queue, time);
             printf("%d,FINISHED,process-name=%s,proc-remaining=%d\n", time, running_proc->proc_name,get_code_num(ready_queue) );
+            running_proc = NULL;
         }else{
             time += quantum;
             running_proc->service_time -= quantum;
@@ -167,13 +129,57 @@ void round_robin(Queue *proc_queue, Queue *ready_queue, int quantum) {
                 time += quantum;
                 running_proc -> service_time = 0;
                 running_proc -> state = FINISHED;
-                running_proc = NULL;
                 add_to_ready_queue(proc_queue, ready_queue, time);
                 printf("%d,FINISHED,process-name=%s,proc-remaining=%d\n", time, running_proc->proc_name,get_code_num(ready_queue) );
+                running_proc = NULL;
             }
         }
     }
 }
+
+
+//将到达时间小于等于当前时间的进程加入就绪队列
+void add_to_ready_queue(Queue *proc_queue, Queue *ready_queue, int time) {
+    PCB *current = proc_queue->head, *previous = NULL;
+    while (current != NULL && current->arrival_time <= time) {
+        PCB *next = current->next;
+        if (previous == NULL) {
+            proc_queue->head = next;
+        } else {
+            previous->next = next;
+        }
+        if(proc_queue->head == NULL) {
+            proc_queue->tail = NULL;
+        }
+
+        current->next = NULL;
+        current->state = READY;
+        enqueue(ready_queue, current);
+        previous = current;  // 更新 previous
+        current = next;
+    }
+}
+
+//从文件中读取进程信息
+Queue *get_processes(char *filename) {
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) {
+        printf("File not found\n");
+        return NULL;
+    }
+    Queue *proc_queue = createQueue();
+    char proc_name[MAX_LENTH_OF_PROCESS_NAME];
+    int arrival_time;
+    int service_time;
+    int memory_requirement;
+    while (fscanf(file, "%s %d %d %d", proc_name, &arrival_time, &service_time, &memory_requirement) == 4) {
+        PCB *pcb = createPCB(proc_name, arrival_time, service_time, memory_requirement, WAITING);
+        enqueue(proc_queue, pcb);
+    }
+    fclose(file);
+    return proc_queue;
+}
+
 
 
 
@@ -199,11 +205,10 @@ int main(int argc, char **argv){
     }
     Queue *proc_queue = get_processes(filename);
     Queue *ready_queue = createQueue();
-    if(strcmp(scheduling_algorithm, "infinite") == 0){
-        round_robin(proc_queue, ready_queue, quantum);
-    }
+    round_robin(proc_queue, ready_queue, quantum);
     return 0;
 }
+
 
 
 
