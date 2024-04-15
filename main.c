@@ -218,7 +218,7 @@ int page_fit(process *p, int pages[], Queue *ready_queue,int time) {
     int page_needed = (p->mem_size + 3) / 4;
     int free_pages = count_pages(pages);
     if (free_pages < page_needed) {
-        evict_page(pages, ready_queue, time,page_needed);
+        evict_pages(pages, ready_queue, time,page_needed);
     }
     int free_count = 0;
     int i=0;
@@ -236,7 +236,7 @@ int page_fit(process *p, int pages[], Queue *ready_queue,int time) {
     return 1;
 }
 
-void evict_page(int pages[], Queue *ready_queue, int time, int page_needed){
+void evict_pages(int pages[], Queue *ready_queue, int time, int page_needed){
     while(count_pages(pages) < page_needed){
         int i = 0;
         process *oldest = dequeue(ready_queue);
