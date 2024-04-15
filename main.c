@@ -1,4 +1,3 @@
-//导入需要的头文件
 #include <stddef.h> 
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,206 +5,396 @@
 #include <string.h>
 #include <math.h>
 
-#define MAX_LENTH_OF_PROCESS_NAME 9
+typedef struct Process process;
+#define READY 0
+#define RUNNING 1
+#define FINISHED 2
 
-//定义进程状态
-typedef enum {
-    READY = 0,
-    RUNNING = 1,
-    FINISHED = 2,
-    WAITING = 3
-} State;
+struct Process {
+    char name[10];
+    int arrival_time;
+    int remaining_time;
+    int mem_size;
+    int mem_start;
+    int state;
+    process *next;
+    int frames[512];
+    int page_num;
+};
 
-//定义进程控制块结构体
-typedef struct PCB{
-    char proc_name[MAX_LENTH_OF_PROCESS_NAME];          //进程名
-    int arrival_time;                                   //到达时间
-    int service_time;                                   //服务时间
-    int memory_requirement;                             //内存需求  
-    State state;                                        //状态
-    struct PCB *next;                                   //指向下一个进程的指针
-
-}PCB;
-
-//创建进程控制块
-PCB *createPCB(char *proc_name, int arrival_time, int service_time, int memory_requirement, State state) {
-    PCB *pcb = malloc(sizeof(PCB));
-    strcpy(pcb->proc_name, proc_name);
-    pcb->arrival_time = arrival_time;
-    pcb->service_time = service_time;
-    pcb->memory_requirement = memory_requirement;
-    pcb->state = 3;
-    pcb->next = NULL;
-    return pcb;
-}
-
-//定义进程队列结构体
 typedef struct {
-    PCB *head;                                          //队列头指针
-    PCB *tail;                                          //队列尾指针
-    int size;                                           //队列大小
+    process *head;
+    process *tail;
 } Queue;
 
-//创建进程队列
-Queue *createQueue() {
-    Queue *queue = (Queue *)malloc(sizeof(Queue));
-    queue->head = NULL;
-    queue->tail = NULL;
-    queue->size = 0;
+process *create_process(char *name, int arrival_time, int remaining_time, int mem_size) {
+    process *new_process = malloc(sizeof(process));
+    new_process->arrival_time = arrival_time;
+    new_process->remaining_time = remaining_time;
+    new_process->mem_size = mem_size;
+    new_process->mem_start = -1;
+    new_process->state = READY;
+    new_process->next = NULL;
+    strcpy(new_process->name, name);
+    new_process->page_num = 0;
+    return new_process;
+
+}
+
+Queue *enqueue(Queue *queue, process *new_process) {
+    if (queue->head == NULL) {
+        queue->head = new_process;
+        queue->tail = new_process;
+    } else {
+        queue->tail->next = new_process;
+        queue->tail = new_process;
+    }
     return queue;
 }
 
-//判断队列是否为空
-int isEmpty(Queue *queue) {
-    return queue->size == 0;
-}
-
-//入队
-void enqueue(Queue *queue, PCB *pcb) {
-    if (isEmpty(queue)) {
-        queue->head = pcb;
-        queue->tail = pcb;
-    } else {
-        queue->tail->next = pcb;
-        queue->tail = pcb;
+int count_processes(Queue *queue) {
+    int count = 0;
+    process *current = queue->head;
+    while (current != NULL) {
+        count++;
+        current = current->next;
     }
-    queue->size++;
+    return count;
 }
 
-//出队
-PCB *dequeue(Queue *queue) {
-    if (isEmpty(queue)) {
+process *dequeue(Queue *queue) {
+    if(queue->head == NULL) {
         return NULL;
     }
-    PCB *pcb = queue->head;
+    process *removed = queue->head;
     queue->head = queue->head->next;
-    queue->size--;
-    return pcb;
-}
-
-//计算队列中的进程数量
-int get_code_num (Queue *queue) {
-    return queue->size;
-}
-
-
-
-
-
-//实现round robin调度算法
-void round_robin(Queue *proc_queue, Queue *ready_queue, int quantum) {
-    int time = 0;
-    PCB *running_proc = NULL;
-    while (!isEmpty(proc_queue) || !isEmpty(ready_queue) || running_proc != NULL) {
-        add_to_ready_queue(proc_queue, ready_queue, time);
-        PCB * running_proc = dequeue(ready_queue);
-        if(running_proc == NULL){
-            time++;
-            continue;
-        }
-        running_proc -> state = RUNNING;
-        printf("%d,RUNNING,process-name=%s,remaining-time=%d\n", time, running_proc->proc_name, running_proc->service_time);
-        if(running_proc && running_proc->service_time <= quantum){
-            time += quantum;
-            running_proc->service_time = 0;
-            running_proc->state = FINISHED;
-            add_to_ready_queue(proc_queue, ready_queue, time);
-            printf("%d,FINISHED,process-name=%s,proc-remaining=%d\n", time, running_proc->proc_name,get_code_num(ready_queue) );
-            running_proc = NULL;
-        }else{
-            time += quantum;
-            running_proc->service_time -= quantum;
-            add_to_ready_queue(proc_queue, ready_queue, time);
-            if(!isEmpty(ready_queue)){
-                running_proc -> state = READY;
-                enqueue(ready_queue, running_proc);
-            }
-            while(isEmpty(ready_queue)&&running_proc -> service_time > quantum){
-                time += quantum;
-                running_proc -> service_time -= quantum;
-                add_to_ready_queue(proc_queue, ready_queue, time);
-            }
-            if(running_proc -> service_time <= quantum && isEmpty(ready_queue)){
-                time += quantum;
-                running_proc -> service_time = 0;
-                running_proc -> state = FINISHED;
-                add_to_ready_queue(proc_queue, ready_queue, time);
-                printf("%d,FINISHED,process-name=%s,proc-remaining=%d\n", time, running_proc->proc_name,get_code_num(ready_queue) );
-                running_proc = NULL;
-            }
-        }
+    if(queue->head == NULL) {
+        queue->tail = NULL;
     }
+    removed->next = NULL;
+    return removed;
 }
 
-
-//将到达时间小于等于当前时间的进程加入就绪队列
-void add_to_ready_queue(Queue *proc_queue, Queue *ready_queue, int time) {
-    PCB *current = proc_queue->head, *previous = NULL;
-    while (current != NULL && current->arrival_time <= time) {
-        PCB *next = current->next;
-        if (previous == NULL) {
-            proc_queue->head = next;
-        } else {
-            previous->next = next;
-        }
-        if(proc_queue->head == NULL) {
-            proc_queue->tail = NULL;
-        }
-
-        current->next = NULL;
-        current->state = READY;
-        enqueue(ready_queue, current);
-        previous = current;  // 更新 previous
-        current = next;
-    }
+int is_empty(Queue *queue) {
+    return queue->head == NULL;
 }
 
-//从文件中读取进程信息
-Queue *get_processes(char *filename) {
+void read_file(Queue *proc_queue, char *filename) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
-        printf("File not found\n");
-        return NULL;
+        printf("Error opening file\n");
+        return;
     }
-    Queue *proc_queue = createQueue();
-    char proc_name[MAX_LENTH_OF_PROCESS_NAME];
+    char name[10];
     int arrival_time;
-    int service_time;
-    int memory_requirement;
-    while (fscanf(file, "%s %d %d %d", proc_name, &arrival_time, &service_time, &memory_requirement) == 4) {
-        PCB *pcb = createPCB(proc_name, arrival_time, service_time, memory_requirement, WAITING);
-        enqueue(proc_queue, pcb);
+    int remaining_time;
+    int mem_size;
+    while (fscanf(file, "%d %s %d %d\n",&arrival_time, name,  &remaining_time, &mem_size) == 4) {
+        process *new_process = create_process(name, arrival_time, remaining_time, mem_size);
+        proc_queue = enqueue(proc_queue, new_process);
     }
     fclose(file);
-    return proc_queue;
 }
 
+void remove_process(Queue *q, process *p) {
+    if (q == NULL || p == NULL || q->head == NULL) {
+        return; 
+    }
+    process *previous = NULL;
+    process *current = q->head;
+    while (current != NULL && current != p) {
+        previous = current;
+        current = current->next;
+    }
+    if (current == NULL) {
+        return; 
+    }
+    if (previous == NULL) {
+        q->head = current->next; 
+        if (q->tail == p) {
+            q->tail = NULL; 
+        }
+    } else {
+        previous->next = current->next; 
+        if (current == q->tail) {
+            q->tail = previous; 
+        }
+    }
+    current->next = NULL; 
+}
+
+Queue *create_queue() {
+    Queue *queue = malloc(sizeof(Queue));
+    queue->head = NULL;
+    queue->tail = NULL;
+    return queue;
+}
+
+void obtain_input(Queue *proc_queue, Queue *ready_queue, int time) {
+    process *current = proc_queue->head;
+    while (current != NULL && current->arrival_time <= time) {
+        process *next = current->next;
+        remove_process(proc_queue, current);
+        current -> next = NULL;
+        ready_queue = enqueue(ready_queue, current);
+        current = next;
+    }
+    
+}
+
+int first_fit(process *p, int *memory) {
+    int i = 0; // 初始化变量i
+    int free_count = 0; // 连续空闲内存计数器
+    while (i < 2048) {
+        if (memory[i] == 0) { // 检查当前内存块是否空闲
+            free_count++; // 增加连续空闲内存块计数
+            if (free_count == p->mem_size) { // 检查是否有足够的连续空闲内存
+                int start_index = i - free_count + 1; // 计算内存起始位置
+                p->mem_start = start_index; // 设置进程的内存起始位置
+                for (int j = start_index; j < start_index + p->mem_size; j++) {
+                    memory[j] = 1; // 标记内存为已分配
+                }
+                return 1; // 成功分配内存，返回1
+            }
+        } else {
+            free_count = 0; // 重置连续空闲内存块计数器
+        }
+        i++; // 移至下一个内存块
+    }
+    return 0; // 未找到足够的空闲内存，返回0
+}
+
+void release_memory(process *p, int *memory) {
+    for (int i = p->mem_start; i < p->mem_start + p->mem_size; i++) {
+        memory[i] = 0; // 释放内存
+    }
+}
+
+int memory_usage(int *memory) {
+    int one_count = 0;
+    int i;
+    for (i = 0; i < 2048; i++) {
+        if (memory[i] == 1) {
+            one_count++;
+        }
+    }
+    // Add 1024 to the total before dividing to round the result
+    return (one_count * 100 + 2047) / 2048;
+}
+
+int page_usage(int pages[]) {
+    int one_count = 0;
+    for (int i = 0; i < 512; i++) {
+        if (pages[i] == 1) {
+            one_count++;
+        }
+    }
+    return (one_count * 100 + 511) / 512;  // 加上 511 实现向上取整
+}
+// Function to count the number of free pages
+int count_pages(int pages[]){
+    int count = 0;
+    int i;
+    for(i=0; i<512; i++){
+        if(pages[i] == 0){
+            count++;
+        }
+    }
+    return count;
+}
+
+void printArr(int arr[], int size) {
+    printf("[");
+    for (int i = 0; i < size; i++) {
+        printf("%d", arr[i]);
+        if (i < size - 1) {
+            printf(",");
+        }
+    }
+    printf("]\n");
+}
+
+int page_fit(process *p, int pages[], Queue *ready_queue,int time) {
+    int page_needed = (p->mem_size + 3) / 4;
+    int free_pages = count_pages(pages);
+    if (free_pages < page_needed) {
+        evict_page(pages, ready_queue, time,page_needed);
+    }
+    int free_count = 0;
+    int i=0;
+    while(i < 512){
+        if(pages[i] == 0){
+            p -> frames[free_count] = i;
+            free_count++;
+            pages[i] = 1;
+        }
+        if(free_count == page_needed){
+            break;
+        }
+    }
+    p -> page_num = page_needed;
+    return 1;
+}
+
+void evict_page(int pages[], Queue *ready_queue, int time, int page_needed){
+    while(count_pages(pages) < page_needed){
+        int i = 0;
+        process *oldest = dequeue(ready_queue);
+        if(oldest -> frames == NULL){
+            continue;
+        }
+        printf("%d,EVICTED,evicted-frames=", time);
+        printArr(oldest -> frames, oldest -> page_num);
+        for(i = 0; i < oldest -> page_num; i++){
+            pages[oldest -> frames[i]] = 0;
+        }
+        oldest -> page_num = 0;
+        oldest -> state = READY;
+        ready_queue = enqueue(ready_queue, oldest);
+
+    }
+}
+
+int parse_arguments(int argc, char **argv, char **filename, char **algorithm, int *quantum) {
+    if (argc != 7) {
+        printf("Invalid number of arguments\n");
+        return 0; // 返回0表示参数不足
+    }
+    for (int i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "-f") == 0 && i + 1 < argc) { 
+            *filename = argv[i + 1];
+        } else if (strcmp(argv[i], "-m") == 0 && i + 1 < argc) {
+            *algorithm = argv[i + 1];
+        } else if (strcmp(argv[i], "-q") == 0 && i + 1 < argc) {
+            *quantum = atoi(argv[i + 1]);
+        }
+    }
+    return 1; // 返回1表示成功解析所有参数
+}
+
+
+void deallocate(int pages[], process *p, int time){
+    printf("%d,EVICTED,evicted-frames=", time);
+    printArr(p -> frames, p -> page_num);
+    int i = 0;
+    while(i < p -> page_num){
+        pages[p -> frames[i]] = 0;
+        i++;
+    }
+    p -> page_num = 0;
+}
+
+void print_process_status(const char *algorithm, process *current, int *memory, int *pages, int time) {
+    if (strcmp(algorithm, "infinite") == 0) {
+        printf("%d,RUNNING,process-name=%s,remaining-time=%d\n", 
+               time, current->name, current->remaining_time);
+    } else if (strcmp(algorithm, "first-fit") == 0) {
+        int mem_usage = memory_usage(memory);
+        printf("%d,RUNNING,process-name=%s,remaining-time=%d,mem-usage=%d%%,allocated-at=%d\n", 
+               time, current->name, current->remaining_time, mem_usage, current->mem_start);
+    } else if (strcmp(algorithm, "paged") == 0) {
+        int page_usage_rate = page_usage(pages);
+        printf("%d,RUNNING,process-name=%s,remaining-time=%d,mem-usage=%d%%,mem-frames=", 
+               time, current->name, current->remaining_time, page_usage_rate);
+        printArr(current->frames, current->page_num);
+    }
+}
 
 
 
 
 int main(int argc, char **argv){
-    int quantum;
+    int memory[2048] = {0};
+    int pages[512] = {0};
+    Queue *proc_queue = create_queue();
+    Queue *ready_queue = create_queue();
     char *filename;
-    char *scheduling_algorithm;
-    if(argc != 7){
-        printf("invalid input\n");
+    char *algorithm;
+    int quantum;
+    int time = 0;
+    if (!parse_arguments(argc, argv, &filename, &algorithm, &quantum)) {
         return 0;
     }
-    for(int i = 0; i < argc; i++){
-        if(strcmp(argv[i], "-q") == 0){
-            quantum = atoi(argv[i+1]);
+    read_file(proc_queue, filename);
+    while(!is_empty(proc_queue) || ! is_empty(ready_queue)){
+        obtain_input(proc_queue, ready_queue, time);
+        process *current = NULL;
+        for(;;){
+            current = dequeue(ready_queue);
+            while (
+                current ==NULL||
+                current -> mem_start != -1 && strcmp(algorithm, "first") == 0 ||
+                strcmp(algorithm, "page") == 0 && current -> page_num != 0||
+                strcmp(algorithm,"infinite") == 0
+            ){
+                break;
+            }
+            int has_memory = -1;
+            if (strcmp(algorithm,"first-fit")==0){
+                has_memory = first_fit(current, memory);
+            }else if (strcmp(algorithm,"page")==0){
+                has_memory = page_fit(current, pages, ready_queue, time);
+            }
+            if(has_memory == 1){
+                break;
+            }
+            enqueue(ready_queue, current);
         }
-        if(strcmp(argv[i], "-f") == 0){
-            filename = argv[i+1];
+        if(current == NULL){
+            time++;
+            continue;
         }
-        if(strcmp(argv[i], "-s") == 0){
-            scheduling_algorithm = argv[i+1];
-        }
+        print_process_status(algorithm, current, memory, pages, time);
+
+        current -> state = RUNNING;
+        if(current -> remaining_time <= quantum){
+            time += quantum ;
+            current -> remaining_time = 0;
+            current -> state = FINISHED;
+            obtain_input(proc_queue, ready_queue, time);
+            int count = count_processes(ready_queue);
+            if(strcmp(algorithm, "first-fit") == 0){
+                release_memory(current, memory);
+            }
+            if(strcmp(algorithm, "page") == 0){
+                deallocate(pages, current, time);
+            }
+            printf("%d,FINISHED,process-name=%s,proc-remaining=%d\n",time, current -> name, count);
+            current = NULL;
+        }else {
+            time += quantum;
+            current -> remaining_time -= quantum;
+            obtain_input(proc_queue, ready_queue, time);
+            if(!is_empty(ready_queue)){
+                current -> state = READY;
+                enqueue(ready_queue, current);
+            }else{
+                while(is_empty(ready_queue) && current -> remaining_time > quantum){
+                    time+= quantum;
+                    current -> remaining_time -= quantum;
+                    obtain_input(proc_queue, ready_queue, time);
+                }
+                if(current -> remaining_time <= quantum && is_empty(ready_queue)){
+                    time += quantum;
+                    current -> remaining_time = 0;
+                    current -> state = FINISHED;
+                    obtain_input(proc_queue, ready_queue, time);
+                    int count = count_processes(ready_queue);
+                    if(strcmp(algorithm, "first-fit") == 0){
+                        release_memory(current, memory);
+                    }
+                    if(strcmp(algorithm, "page") == 0){
+                        deallocate(pages, current, time);
+                    }
+                    printf("%d,FINISHED,process-name=%s,proc-remaining=%d\n",time, current -> name, count);
+                    current = NULL;
+                }else{
+                    current -> state = READY;
+                    enqueue(ready_queue, current);
+                }
+            }
+        } 
     }
-    Queue *proc_queue = get_processes(filename);
-    Queue *ready_queue = createQueue();
-    round_robin(proc_queue, ready_queue, quantum);
     return 0;
 }
 
@@ -213,4 +402,4 @@ int main(int argc, char **argv){
 
 
 
-
+    
